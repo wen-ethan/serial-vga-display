@@ -1,0 +1,17 @@
+# Everything the toolchain generates lands in build/ and is rebuilt by `make`
+# from the .v sources + the .pcf.
+build/
+
+# Stray artifacts if a tool is ever run by hand outside build/
+# yosys netlist / nextpnr bitstream / icepack output / icetime report
+*.json
+*.asc
+*.bin
+*.rpt
+
+# Simulation (iverilog + vvp)
+*.vvp
+*.vcd
+
+# macOS
+.DS_Store
