@@ -8,8 +8,18 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 25 MHz), built with the open-source toolchain: Yosys, nextpnr-ice40, IceStorm
 (`icepack`, `icetime`, `iceprog`), and Icarus Verilog for simulation.
 
-**Status: in progress.** The build flow and the command parser's simulation
-harness are in place; the render path is not written yet.
+**Status: in progress.** The build flow is proven on hardware, and the command
+parser is complete and passing a self-checking testbench in simulation. The
+render path — character RAM, font ROM, and the character generator that scans
+them out — is not written yet.
+
+## Docs
+
+- [docs/design.md](docs/design.md) — the parser's state table, the byte-alignment
+  invariant, the four protocol decisions and the reasoning behind each, and why
+  the cell address is a running counter rather than a multiply.
+- [docs/verification.md](docs/verification.md) — how each module is tested, what
+  the tests cover, waveform captures, and what is deliberately not covered.
 
 ## Build
 
@@ -33,6 +43,12 @@ Generated files all land in `build/`, which is gitignored.
 testbench puts `dump.vcd` there rather than in the source tree. `wave` opens it
 with `code` for WaveTrace; override with `WAVE=gtkwave`.
 
+`tb_Command_Parser` is self-checking and prints `PASS` or `FAIL`, along with the
+simulation time each test starts at, so the log doubles as an index into
+`dump.vcd`. To open the waves with its signals already chosen and grouped:
+
+    gtkwave build/dump.vcd sim/tb_Command_Parser.gtkw
+
 ## Layout
 
     Makefile                 build and simulation targets, variables inline
@@ -40,7 +56,8 @@ with `code` for WaveTrace; override with `WAVE=gtkwave`.
     common/                  reusable modules, copied verbatim from go-board-fpga
     bringup/                 book designs rebuilt here to prove the build flow
     rtl/                     new RTL for this project
-    sim/                     testbenches
+    sim/                     testbenches and saved waveform signal sets
+    docs/                    design rationale and verification record
     build/                   generated, gitignored
 
 `bringup/` holds the UART loopback and VGA test-pattern designs from the
@@ -64,12 +81,11 @@ into a different port.
 
 ## Scope
 
-The design, protocol, and RTL are my own. The modules in `common/` and the
-designs in `bringup/` come from the [Nandland Go Board tutorial
-series](https://nandland.com/project-1-your-first-go-board-project/) and Russell
-Merrick's *Getting Started with FPGAs*, carried over from
-[go-board-fpga](https://github.com/ethanwen/go-board-fpga). The pin constraints
-file is provided by Nandland for the Go Board.
+The design, protocol, and RTL are my own. The modules in `common/`, the designs
+in `bringup/`, and the Go Board pin constraints all come from Russell Merrick's
+[Nandland](https://nandland.com/project-1-your-first-go-board-project/) (the Go
+Board tutorial series and *Getting Started with FPGAs*), carried over from
+[go-board-fpga](https://github.com/ethanwen/go-board-fpga).
 
 ## License
 
