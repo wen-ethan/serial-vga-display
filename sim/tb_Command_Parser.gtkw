@@ -1,0 +1,44 @@
+[*] GTKWave save file for tb_Command_Parser
+[*] Open with:  gtkwave build/dump.vcd sim/tb_Command_Parser.gtkw
+[*]
+[*] Signals are ordered the way §7 of the walkthrough says to debug: serial in
+[*] at the top, then the decoded byte, then the FSM, then the write port it
+[*] produces, then the cursor state behind it.
+[dumpfile] "build/dump.vcd"
+[size] 1600 700
+[pos] -1 -1
+*-12.0 280966000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] tb_Command_Parser.
+[treeopen] tb_Command_Parser.Parser_Inst.
+@200
+-serial in
+@22
+tb_Command_Parser.r_TX_Byte[7:0]
+@28
+tb_Command_Parser.w_TX_Serial
+tb_Command_Parser.w_RX_DV
+@22
+tb_Command_Parser.w_RX_Byte[7:0]
+@200
+-parser
+@28
+tb_Command_Parser.Parser_Inst.r_SM_Main[1:0]
+@22
+tb_Command_Parser.Parser_Inst.r_ESC_Col[7:0]
+@200
+-write port
+@28
+tb_Command_Parser.w_Wr_En
+@22
+tb_Command_Parser.w_Wr_Addr[3:0]
+tb_Command_Parser.w_Wr_Data[7:0]
+@28
+tb_Command_Parser.w_Busy
+@200
+-cursor
+@22
+tb_Command_Parser.Parser_Inst.r_Cursor_Col[1:0]
+tb_Command_Parser.Parser_Inst.r_Cursor_Row[1:0]
+tb_Command_Parser.Parser_Inst.r_Addr[3:0]
+[pattern_trace] 1
+[pattern_trace] 0
