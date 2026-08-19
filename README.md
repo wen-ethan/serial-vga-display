@@ -10,15 +10,15 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 
 **Status: in progress.** The build flow is proven on hardware, and the command
 parser is complete and passing a self-checking testbench in simulation. The
-render path — character RAM, font ROM, and the character generator that scans
-them out — is not written yet.
+render path (character RAM, font ROM, and the character generator that scans
+them out) is not written yet.
 
 ## Docs
 
-- [docs/design.md](docs/design.md) — the parser's state table, the byte-alignment
+- [docs/design.md](docs/design.md): the parser's state table, the byte-alignment
   invariant, the four protocol decisions and the reasoning behind each, and why
   the cell address is a running counter rather than a multiply.
-- [docs/verification.md](docs/verification.md) — how each module is tested, what
+- [docs/verification.md](docs/verification.md): how each module is tested, what
   the tests cover, waveform captures, and what is deliberately not covered.
 
 ## Build
@@ -29,7 +29,7 @@ them out — is not written yet.
     make clean                          # remove build/
 
 `TOP` picks which design to build, and each one names its own file list in the
-Makefile. Nothing is globbed — yosys only sees the files it is handed, so every
+Makefile. Nothing is globbed; yosys only sees the files it is handed, so every
 module a design instantiates has to be listed there.
 
 Generated files all land in `build/`, which is gitignored.
