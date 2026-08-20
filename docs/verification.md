@@ -129,6 +129,72 @@ unrelated.
 - No test drives two bytes closer together than the UART allows, other than the
   injected pair in test 12.
 
+## Font_ROM
+
+```
+make sim TB=tb_Font_ROM                    # prints four glyphs, then PASS or FAIL
+```
+
+### The harness
+
+[sim/tb_Font_ROM.v](../sim/tb_Font_ROM.v) reads glyph rows out of the ROM and
+prints each as eight characters, `#` for a set pixel and `.` for a clear one; in this case, the simulation log is the artifact, as a malformed character can be easily discerned.
+
+The one-clock read latency is confined to a single `READ` task: it sets the
+address, waits for the edge, steps past it so the nonblocking update has landed,
+and copies the byte out. Everything above that task works on a value already in
+hand, so no other line in the file has to know the ROM has latency at all; this cycle also used for `Char_Generator`.
+### Bit order
+
+`font8x8` stores each row with **bit 0 as the leftmost pixel**, the reverse of
+the obvious guess. Indexing `[7-col]` rather than `[col]` renders every glyph
+mirrored. The printing loop counts `col` up from zero, which states the
+convention in the same direction the hardware will read it.
+
+### Coverage
+
+| # | Glyph | What it proves |
+| --- | --- | --- |
+| 1 | `F` | Asymmetric, so a reversed bit order draws a mirror image and fails by eye |
+| 2 | `L` | A second asymmetric glyph, in case `F` alone happened to be right |
+| 3 | `p` | One of only eight printable glyphs with a non-blank row 7 |
+| 4 | space (`0x20`) | Renders entirely blank, so a cleared screen really is empty |
+| 5 | `F` row 0 `=== 8'h7F` | An assertion, so a run cannot pass without checking anything |
+
+While most of the tests are 'eyeball tests', Test 5 checks to make sure a run cannot pass without checking values.
+
+### The expected output is in the source
+
+`tools/gen_font_rom.py` emits the same ASCII art as a comment beside every byte
+it writes, so the eight lines printed for a glyph compare directly against the
+eight `r_Mem[...]` lines in [rtl/Font_ROM.v](../rtl/Font_ROM.v). Those comments
+are anchored to specific addresses, so a one-row shift breaks the correspondence
+immediately rather than looking plausible.
+
+### Synthesis
+
+Synthesized standalone, the ROM maps to two `SB_RAM40_4K`, eight `SB_LUT4` and
+one `SB_DFF`. The two block RAMs are the 8 Kbit of glyph data: an EBR holds
+4 Kbit, so in 512×8 mode a 1024×8 ROM spans two of them. The eight LUTs are a
+2:1 mux per output bit choosing which half the address landed in, and the
+flip-flop delays the selecting address bit so it arrives alongside the
+registered read data.
+
+This depends entirely on the read being synchronous. An asynchronous read cannot
+map to an EBR, and yosys would build 8192 bits of ROM out of a part with 1280
+LUTs. The check is the reason the generator emits an initialized array rather
+than a `case` statement. Full utilization for the assembled design is recorded
+in [design.md](design.md) once `Char_RAM` exists.
+
+### Not covered
+
+- Four of 128 glyphs are inspected and one byte is asserted. The other 124 are
+  covered only by the generator's checks on the source file (glyph count, bytes
+  per glyph, entries emitted), not by any test.
+- Nothing compares the ROM against the original header byte for byte. The
+  generator is trusted to have transcribed it, and the four glyphs are the
+  sample that would catch a systematic transcription error.
+
 ## Bring-up designs
 
 `UART_Loopback_Top` and `VGA_Test_Patterns_Top` were confirmed on real hardware

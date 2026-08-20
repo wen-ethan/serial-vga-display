@@ -47,6 +47,7 @@ SIM_SRC_tb_VGA_Test_Patterns = $(SRC_VGA_Test_Patterns_Top)
 SIM_SRC_tb_Command_Parser    = rtl/Command_Parser.v \
                                common/UART_RX.v \
                                common/UART_TX.v
+SIM_SRC_tb_Font_ROM          = rtl/Font_ROM.v
 
 TB      ?= tb_Command_Parser
 SIM_SRC  = sim/$(TB).v $(SIM_SRC_$(TB))
@@ -82,7 +83,14 @@ sim: $(BUILD)/$(TB).vvp
 wave: sim
 	$(WAVE) $(BUILD)/dump.vcd
 
+# rtl/Font_ROM.v is generated but committed, so a fresh clone builds without
+# Python. Regenerate deliberately, never as a build prerequisite: a clone's file
+# timestamps come out in checkout order, and a build should not start demanding
+# Python because make decided the script looked newer than its output.
+font:
+	python3 tools/gen_font_rom.py rtl/Font_ROM.v
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all prog timing sim wave clean
+.PHONY: all prog timing sim wave font clean
