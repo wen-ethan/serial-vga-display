@@ -37,6 +37,18 @@ SRC_VGA_Test_Patterns_Top = bringup/VGA_Test_Patterns_Top.v \
                             common/VGA/Test_Pattern_Gen.v \
                             common/VGA/Sync_To_Count.v
 
+# Character display with no character RAM and no protocol: Char_Generator fed
+# by a stand-in, to prove the render path on its own before integration.
+SRC_Static_Display_Top = bringup/Static_Display_Top.v \
+                         rtl/Char_Generator.v \
+                         rtl/Font_ROM.v \
+                         common/UART_RX.v \
+                         common/UART_TX.v \
+                         common/Binary_To_7Segment.v \
+                         common/VGA/VGA_Sync_Pulses.v \
+                         common/VGA/VGA_Sync_Porch.v \
+                         common/VGA/Sync_To_Count.v
+
 TOP     ?= UART_Loopback_Top
 SOURCES  = $(SRC_$(TOP))
 
@@ -48,6 +60,12 @@ SIM_SRC_tb_Command_Parser    = rtl/Command_Parser.v \
                                common/UART_RX.v \
                                common/UART_TX.v
 SIM_SRC_tb_Font_ROM          = rtl/Font_ROM.v
+SIM_SRC_tb_Char_Generator    = rtl/Char_Generator.v \
+                               rtl/Font_ROM.v \
+                               common/VGA/VGA_Sync_Pulses.v \
+                               common/VGA/Sync_To_Count.v
+# Not a test: renders one full frame to build/frame.pgm for the docs.
+SIM_SRC_tb_Render_Frame      = $(SIM_SRC_tb_Char_Generator)
 
 TB      ?= tb_Command_Parser
 SIM_SRC  = sim/$(TB).v $(SIM_SRC_$(TB))

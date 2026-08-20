@@ -12,6 +12,7 @@ build/
 # Simulation (iverilog + vvp)
 *.vvp
 *.vcd
+*.pgm
 
 # macOS
 .DS_Store

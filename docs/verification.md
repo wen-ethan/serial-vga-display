@@ -195,6 +195,129 @@ in [design.md](design.md) once `Char_RAM` exists.
   generator is trusted to have transcribed it, and the four glyphs are the
   sample that would catch a systematic transcription error.
 
+## Char_Generator
+
+```
+make sim TB=tb_Char_Generator              # prints PASS or FAIL
+make sim TB=tb_Render_Frame                # renders one full frame to build/frame.pgm
+```
+
+### The property that needs a testbench
+
+Char_Generator is a three-stage pipeline (the character RAM read register, the
+font ROM read register, and the output register) so HSync and VSync have to be
+delayed by three clocks to stay with the video they describe; every module in
+the video chain honours this rule. Because an error to this delay is invisible on a monitor, the testbench below was created to catch any errors in simulation instead. 
+
+### The harness
+
+[sim/tb_Char_Generator.v](../sim/tb_Char_Generator.v) shrinks the frame to
+64×40 total and 48×32 active, giving a 3×2 character grid and a 2560-clock
+frame instead of 420,000; cells stay 16 pixels, so the generator's bit slices
+are untouched.
+
+`VGA_Sync_Porch` is deliberately not instantiated. Its porch constants are
+hardcoded at 18/50/10/33, larger than the whole shrunken frame, and it is not
+what is under test.
+
+Char_RAM is stood in for by a plain array with the same one-clock read latency,
+sized to the full address space because addresses computed during blanking run
+past the six live cells.
+
+The testbench captures the frame into an array and compares **every pixel**
+against a value computed from first principles: which cell, which glyph row,
+which glyph column, look up the bitmap. One comparison therefore covers glyph
+shape, cell position, blank cells and cell boundaries at once.
+
+The expected bitmaps are hardcoded rather than read from `Font_ROM`. A test that
+fetches its expectations from the thing under test proves the two agree, not
+that either is right.
+
+### Positioning the capture
+
+The capture counter is anchored **only** at the frame boundary, the rising edge
+of the DUT's VSync, and free-runs from there. HSync positions nothing; it is
+asserted against the counter instead:
+
+```verilog
+if (w_HSync_CG !== (r_Cap_Col < c_ACTIVE_COLS)) → FAIL
+```
+
+The first version of this testbench did the opposite, advancing the column counter on HSync with the reasoning that poistion should come from the module's own syncs exactly as the porch derives it downstream. However, a skewed HSync drags the capture along with it, so the bug moves its own detector. See the mutation table below.
+
+### Coverage
+
+| # | Test | What it proves |
+| --- | --- | --- |
+| 1 | Empty screen | Every cell blank; nothing painted from stale pipeline state |
+| 2 | One glyph in cell 0 | Glyph shape, position, and the cell/glyph bit slices |
+| 3 | Glyph in the last cell | The end of the address arithmetic |
+| 4 | Two different glyphs, adjacent | No character latched across a cell boundary |
+| 5 | Every cell filled, edges lit | Glyphs against all three blanking boundaries |
+| 6 | The next frame | Identical, so the generator holds no frame state |
+| — | Continuous | Nothing painted outside the live area |
+| — | Continuous | Syncs agree with the free-running position counter |
+| — | Continuous | Each channel fully on or fully off, all three agreeing |
+
+### Choosing glyphs that can fail
+
+`F` and `L` are used because they are left–right asymmetric. `A`, `H`, `I`, `M`,
+`O`, `T` and `X` render identically under a reversed bit order and would pass a
+mirrored implementation. Test 5 adds `*` and `_`, as there are the only two printable glyphs to use a cell's outermost pixels.
+
+### Trusting the tests
+
+| Mutation | |
+| --- | --- |
+| HSync delayed 2 stages instead of 3 | caught |
+| Both syncs delayed 2 stages instead of 3 | caught |
+| Blanking flag delayed once instead of twice | caught |
+| Blanking removed entirely | caught |
+| Glyph column delayed once instead of twice | caught |
+| Glyph bit order reversed | caught |
+| Cell address off by one | caught |
+| 2× scaler dropped | caught |
+| Cell slice `/32` instead of `/16` | caught |
+| Video not replicated across the channel width | caught |
+
+**Two of these passed on the first attempt**, and both were failures of the
+testbench, rather than gaps in the module.
+
+`HSync delayed 2 instead of 3` passed because the capture was positioned by
+HSync, so the window moved with the bug. Re-anchoring the counter to the frame
+boundary and asserting HSync separately fixed it.
+
+`Blanking delayed once instead of twice` passed because no glyph on screen lit a
+pixel adjacent to a blanking edge, for the font reason above. Test 5's `*` and
+`_` fixed this issue.
+
+`Video not replicated across the channel width` passed until a continuous check
+was added that every channel is fully on or fully off. Only bit 0 of red is
+captured into the frame, and `3'b001` has that bit set, and as such the symptom would have been a dim grey image, which would have been easy to blame on the cable.
+
+### Rendered figures
+
+[sim/tb_Render_Frame.v](../sim/tb_Render_Frame.v) asserts nothing. It runs the
+same capture at the real 640×480 geometry and writes `build/frame.pgm`, so the
+figures in this repo are generated by the design rather than photographed:
+
+```
+make sim TB=tb_Render_Frame
+ffmpeg -y -i build/frame.pgm docs/images/render.png
+```
+
+A rendered frame is evidence about the RTL. A photograph of the board is
+evidence that the hardware works. They are captioned accordingly.
+
+### Not covered
+
+- Only the 3×2 grid is simulated. The 40×30 parameterization is exercised by
+  `tb_Render_Frame` and by synthesis, neither of which asserts anything.
+- The frame is captured from `o_Red_Video[0]`. The other channels are checked
+  only for agreeing with red and for being fully on or off.
+- `VGA_Sync_Porch` is not in the loop, so the porch alignment downstream of this
+  module is covered by the hardware bring-up rather than by simulation.
+
 ## Bring-up designs
 
 `UART_Loopback_Top` and `VGA_Test_Patterns_Top` were confirmed on real hardware
