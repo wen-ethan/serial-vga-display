@@ -56,7 +56,7 @@ is a property of the state machine's shape, not of the data flowing through it.
 The invariant under test, with `ESC` followed by two printable bytes:
 [verification.md](verification.md#waveforms).
 
-## The four decisions
+## The protocol decisions
 
 Each of these is a fork with no universally right answer; instead, I have chosen a design implementation, with my thoughts behind it:
 
@@ -124,6 +124,32 @@ desynchronize, and nothing recovers them automatically.
 This is bounded, which is why it's acceptable: at most two bytes are ever
 misread, the FSM always returns to `IDLE`, and the display keeps refreshing
 throughout, so the system does not lock up under any input.
+
+### Power-up: no clear, and none needed
+
+The parser starts in `IDLE`, and nothing blanks the screen at configuration. The
+display comes up empty anyway, because of two facts that are each checkable
+rather than assumed:
+
+- **The bitstream loads `Char_RAM` with zeros.** All six block RAMs get explicit
+  `.ram_data` sections in `build/Serial_Display_Top.asc` — two carrying font
+  glyphs, and `Char_RAM`'s four written as all zeros. The memory is configured,
+  not merely undefined.
+- **Font entry `0x00` is blank.** font8x8 leaves all 32 control-character glyphs
+  empty, confirmed when the ROM was generated.
+
+Starting the FSM in `CLEAR` instead was considered and rejected; it buys nothing visible, since `0x00` and `0x20` render identically, and its only real argument is that every cell would then definitely hold the byte the protocol calls empty. However, this is not the case, as
+the walk would begin on clock one, inside the
+post-configuration window where block RAM writes are dropped
+([verification.md](verification.md)), so the first ~50 cells would keep `0x00`
+while the rest became `0x20`. Making it correct means a startup hold inside the
+shipping parser — real complexity, added to the design rather than to
+scaffolding, to fix something with no symptom.
+
+Nothing reads `Char_RAM` except `Char_Generator`, and it maps `0x00` and `0x20`
+to the same blank cell. The mismatch between what the memory holds and what the
+protocol calls empty is therefore unobservable, and `FF` exists for a clear the
+user actually asked for.
 
 ## Address arithmetic
 
@@ -211,19 +237,20 @@ Six of the part's sixteen EBRs, confirmed from the `READ_MODE` parameters on the
 `SB_RAM40_4K` cells in the synthesised netlist rather than predicted:
 `10` is 1024×4, `11` is 2048×2.
 
-Measured on the assembled render path (`Static_Display_Top`, which is
-`Char_Generator` reading `Char_RAM` with `Test_Writer` filling it):
+Measured on the shipping design, `Serial_Display_Top`:
 
 ```
-ICESTORM_LC :  518/1280   40%
+ICESTORM_LC :  583/1280   45%
 ICESTORM_RAM:    6/16     37%
-Max frequency: 121.85 MHz     (25 MHz required)
+Max frequency: 111.91 MHz     (25 MHz required)
 ```
 
-The logic figure includes `Test_Writer`'s character multiplexer, which is
-scaffolding and leaves on integration. The frequency is the deepest path in the
-design — a block RAM read feeding the font ROM's address — and it clears the
-requirement by nearly 5x.
+The logic figure went *up* on integration, from 518, even though `UART_TX` and
+the bring-up writer both came out: `Command_Parser` costs more than either,
+carrying a cursor, a clear-walk counter, a four-state FSM and the `ESC_ROW`
+address reconstruction. The frequency is the deepest path in the design — a
+block RAM read feeding the font ROM's address — and it clears the requirement by
+4.5x.
 
 ### The synchronous read is what makes any of this work
 

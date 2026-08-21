@@ -51,6 +51,17 @@ SRC_Static_Display_Top = bringup/Static_Display_Top.v \
                          common/VGA/VGA_Sync_Porch.v \
                          common/VGA/Sync_To_Count.v
 
+SRC_Serial_Display_Top = rtl/Serial_Display_Top.v \
+                         rtl/Command_Parser.v \
+                         rtl/Char_RAM.v \
+                         rtl/Char_Generator.v \
+                         rtl/Font_ROM.v \
+                         common/UART_RX.v \
+                         common/Binary_To_7Segment.v \
+                         common/VGA/VGA_Sync_Pulses.v \
+                         common/VGA/VGA_Sync_Porch.v \
+                         common/VGA/Sync_To_Count.v
+
 TOP     ?= UART_Loopback_Top
 SOURCES  = $(SRC_$(TOP))
 
@@ -69,6 +80,8 @@ SIM_SRC_tb_Char_Generator    = rtl/Char_Generator.v \
                                common/VGA/Sync_To_Count.v
 # Not a test: renders one full frame to build/frame.pgm for the docs.
 SIM_SRC_tb_Render_Frame      = $(SIM_SRC_tb_Char_Generator)
+
+SIM_SRC_tb_Serial_Display_Top = $(SRC_Serial_Display_Top) common/UART_TX.v
 
 TB      ?= tb_Command_Parser
 SIM_SRC  = sim/$(TB).v $(SIM_SRC_$(TB))

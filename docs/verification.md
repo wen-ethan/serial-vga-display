@@ -318,6 +318,98 @@ evidence that the hardware works. They are captioned accordingly.
 - `VGA_Sync_Porch` is not in the loop, so the porch alignment downstream of this
   module is covered by the hardware bring-up rather than by simulation.
 
+## Serial_Display_Top
+
+```
+make sim TB=tb_Serial_Display_Top          # prints PASS or FAIL
+```
+
+### The failures only integration can produce
+
+Every module below has its own testbench and every one passes. This testbench
+exists for what those cannot see:
+
+**`Command_Parser` and `Char_Generator` both compute `row * c_COLS + col`.**
+In this way, if they disagreed by one, every unit test in the project would still pass, because neither module would be wrong technically; test 4 catches this.
+
+The same goes for the three parameters that have to agree across parser, memory
+and generator. A mismatched `c_ADDR_BITS` truncates addresses silently; a
+mismatched `c_COLS` puts text in the wrong cell with no error anywhere.
+
+### The harness
+
+[sim/tb_Serial_Display_Top.v](../sim/tb_Serial_Display_Top.v) instantiates the
+real `Serial_Display_Top` and drives its serial input from a real `UART_TX`, so
+bytes travel the path they travel on hardware.
+
+Three things are shrunk so a run takes seconds rather than minutes:
+
+| Parameter | Hardware | Simulation |
+| --- | --- | --- |
+| grid | 40 × 30 | 3 × 2 |
+| frame | 800 × 525 | 64 × 40 |
+| `c_CLKS_PER_BIT` | 217 | 16 |
+
+`c_CLKS_PER_BIT` shrinking allows for the testbench speedup, as at 217, a single character occupies 2170 clocks, more than a whole shrunken frame; at 16, a character only takes 160 clocks, which is much more reasonable.
+
+However, this cannot test the clear-walk timing margin, as the margin is an argument from two datasheet numbers and nothing in this repo can reasonably measure it.
+
+Assertions are taken at `Char_Generator`'s outputs, reached hierarchically,
+reusing the frame capture from [tb_Char_Generator](#char_generator).
+`VGA_Sync_Porch` is skipped: its porch constants are larger than this whole
+frame, and it is unchanged and hardware-proven.
+
+Expected contents are held in a testbench-side model of the screen that the
+tests update as they send, so every check is against what the protocol says
+should be there rather than against a handful of spot values.
+
+### Coverage
+
+| # | Test | What it proves |
+| --- | --- | --- |
+| 1 | An untouched screen | Blank at power-up, with no clear command |
+| 2 | `"FL"` | Two glyphs in cells 0 and 1 — the whole system in one test |
+| 3 | `FF` | Every cell blank |
+| 4 | `ESC 2 1` then `"F"` | Parser and generator agree on the cell address |
+| 5 | `0x00`, `0x7F` | Ignored; the frame is unchanged |
+| 6 | `CR` then a character | Column 0, same row, overwriting what was there |
+
+### Trusting the tests
+
+| Mutation | |
+| --- | --- |
+| Parser: `ESC` address off by one row | caught |
+| Generator: read address off by one row | caught |
+| Generator uses a different `c_COLS` than the parser | caught |
+| Top level passes the parser the wrong grid width | caught |
+| Parser drops the printable-range check | caught |
+| Parser: `FF` no longer clears | caught |
+
+The first four are all forms of the same failure (some form of two modules disagreeing about where a cell lives), which shows the importance of this testbench.
+
+### What writing it changed
+
+`Char_RAM` gained an `initial` block zeroing its contents. In simulation the
+array previously started as `X`, while on hardware the bitstream loads zeros, so
+test 1 could not check the power-up behaviour that
+[design.md](design.md#power-up-no-clear-and-none-needed) depends on. Declaring
+it in RTL makes the model match the device and makes the power-up state a
+property of the design rather than of the toolchain's default. The bitstream is
+unchanged, as the cells were already all-zero `.ram_data` blocks.
+
+Test 6 was also wrong on first writing: it expected `CR` to return the cursor to
+row 1, forgetting that writing the last cell in test 4 wraps to (0, 0) —
+[the wrap decision](design.md#end-of-screen-wrap), working exactly as documented.
+The test was wrong, not the design.
+
+### Not covered
+
+- Only the 3×2 grid and the shrunken frame are simulated.
+- `VGA_Sync_Porch` is outside the loop, so the final sync alignment is covered
+  by hardware bring-up rather than by simulation.
+- No test sends bytes closer together than the shrunken UART allows, so
+  back-to-back arrival at the real baud rate is untested.
+
 ## Bring-up designs
 
 `UART_Loopback_Top` and `VGA_Test_Patterns_Top` were confirmed on real hardware
