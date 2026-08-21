@@ -498,3 +498,44 @@ usable for calibration. These modules came from the book projects and are used
 unmodified; the defect is noted rather than fixed, because they are scaffolding
 and `Char_Generator` blanks correctly on its own account —
 [tb_Char_Generator](#char_generator) asserts it continuously.
+
+## Malformed input on hardware
+
+Every case below is already covered by [tb_Command_Parser](#command_parser); running them on the board tests the claim that the hardware system can survive malformed inputs, rather than relying on simulation.
+
+Run on the Go Board at 115200, against `Serial_Display_Top`.
+
+| # | Provoked | Documented behaviour | Result |
+| --- | --- | --- | --- |
+| 1 | `printf '\x00\x01\x7f\x80\xff'` | Ignored; cursor does not move | Matched |
+| 2 | Lone `ESC`, then `AB` a minute later | `A` consumed as column, `B` as row; at most two bytes misread | Matched |
+| 3 | `printf '\x1b\xc8\xc8X'` | Clamps to (39, 29) | Matched |
+| 4 | `printf '\x1b\x1b\x00Y'` | The second `ESC` is column 27, not a restart | Matched |
+| 5 | More than 1200 characters | Wraps to (0, 0) and keeps painting | Matched |
+| 6 | Reconnect at 9600, mash keys | *Junk characters* | **Contradicted**: see below |
+| 7 | Reconnect at 57600, mash keys | Junk characters, no lock-up | Matched; printable bytes landed on screen, the rest were discarded |
+| 8 | `tools/send.py --file tools/test-page.txt` | Every line renders; nothing drops | Matched; the column-38 rule was unbroken across all 30 rows |
+
+No case required a power cycle, and no case left the display frozen or the sync
+dropped.
+
+### A baud mismatch is not a framing error
+
+Test 6 was documented as producing junk characters; however, hardware produced a blank screen instead.
+
+A baud mismatch does not cause a framing error here: `RX_STOP_BIT` in
+[UART_RX.v](../common/UART_RX.v) waits out one bit period and asserts `o_RX_DV`
+without checking that the stop bit is high; as such, nothing is rejected, and as such we must see what byte arrives. At 9600 baud, a bit lasts 2604 clocks; the receiver, configured for 115200 baud, samples its eight data bits at offsets 325 through 1844, all still inside the 9600 start bit. In this way, the board reads `0x00`, returns to idle, finds the line still low, and takes that as another start bit. Each bogus frame spans only ~0.7 of a real 9600 bit, so its eight samples cross at most one edge of the actual signal; every byte comes out as zeros followed by ones, which end up forming `0x00`, `0xC0`, `0xF0`, and `0xFE`. Given all input outside `0x20`-`0x7E` are discarded by the parser's `default` branch, the hardware rightfully shows a blank screen.
+
+To see 'junk' data, the baud needs to be a *near* miss, which is case 7: at 57600 the sampling window straddles data-bit boundaries rather than sitting inside one, so the bytes vary and some land printable.
+
+### Not covered
+
+- The bytes the receiver produces under a baud mismatch were not captured on
+  hardware; only their effect on the display was observed.
+- Case 7 was not run long enough to establish whether a corrupted `0x0C` ever
+  arrives and clears the screen. It is reachable in principle and would be
+  correct behaviour if it happened.
+- Both baud cases were driven by hand from a terminal, so the input is
+  whatever was typed rather than a fixed vector; neither is reproducible as a
+  regression test.
