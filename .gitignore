@@ -14,5 +14,9 @@ build/
 *.vcd
 *.pgm
 
+# Python bytecode from tools/
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
