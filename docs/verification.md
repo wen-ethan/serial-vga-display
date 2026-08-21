@@ -327,3 +327,82 @@ pattern selected by the low nibble of a received byte. Their testbenches,
 [tb_UART_Loopback.v](../sim/tb_UART_Loopback.v) and
 [tb_VGA_Test_Patterns.v](../sim/tb_VGA_Test_Patterns.v), came with the book
 projects and are not self-checking.
+
+`Static_Display_Top` joins them: `Char_Generator` reading the real `Char_RAM`,
+filled once at power-up by `Test_Writer`, with no UART or protocol in the loop.
+It exists so that a pixel bug and a protocol bug cannot be confused, and it
+comes out once `Serial_Display_Top` runs.
+
+### Block RAM writes are lost in a window after configuration
+
+`Test_Writer` originally began walking the memory on the first clock edge after
+configuration. On hardware the first ~50 cells never took their data: the screen
+came up with row 0 blank and row 1 starting about ten cells in, everything after
+that correct. Simulation never showed it, because simulation has no
+configuration phase. Holding the walk off for 4096 clocks fixes it completely.
+
+The likely mechanism comes from Lattice's own documentation. EBR contents are
+*"preserved (write protected) during configuration"*, and configuration is not
+finished at the moment the design starts running: the Programming and
+Configuration technical note states that after CDONE goes high, *"at least 49
+additional dummy bits (49 additional SPI_SCK clock cycles) should be sent before
+the SPI interface pins become available to the user-application."* A design on a
+free-running oscillator therefore begins executing while the memory is still
+write-protected, and writes issued in that window are dropped silently.
+
+The ~50 cells lost and the 49 documented clocks agree closely, but they are
+counted on different clocks — SPI configuration clock versus the 25 MHz user
+clock — so the correspondence is suggestive rather than proven. An analogous
+read-side anomaly is recorded in
+[icestorm issue #76](https://github.com/YosysHQ/icestorm/issues/76): block RAM
+reads within ~36 cycles of reset return zero, but only on the first reset after
+reconfiguration.
+
+**The real design is not exposed to this.** `Command_Parser` cannot write until
+a UART byte arrives, and a byte occupies 2170 clocks, so the earliest possible
+write is far outside the window. `Test_Writer` is unusual precisely because it
+starts on clock one, and the startup hold stays in it for that reason.
+
+### The false trail, and what made it survive
+
+The same symptom was first attributed to the monitor clipping the top character
+row, and that explanation lasted several rounds of debugging before it broke.
+Recording why is more useful than quietly deleting it.
+
+The measurement that seemed to support it was real and still stands: capturing
+the whole 800×525 frame at the `VGA_Sync_Porch` outputs and positioning it from
+the VSync pulse, active video begins at line **35** — the 2-line sync pulse plus
+the 33-line back porch that 640×480@60 specifies — with row 0's glyphs present.
+The render path was never at fault. But "the signal is correct" was then treated
+as evidence for "therefore the display is clipping", which does not follow.
+
+Two things finally distinguished them. First, the shape of what was missing:
+losing all of row 0 *and the first ten cells of row 1* is a raster-linear loss,
+whereas a display clips a rectangle and would have taken the same columns off
+every row. Second, filling every cell on screen with a single character, so the
+missing region had a visible outline — a notch at the top-left rather than a
+straight edge. That test took one flash and should have come first.
+
+**Test patterns 4, 5 and 6 do not blank outside the active area.** They were
+used as a calibration target, on the assumption that a full-screen image would
+let the monitor's auto-adjust find the real frame boundaries. It cannot, because
+those three patterns have no active-area gate:
+
+```verilog
+// Test_Pattern_Gen.v, pattern 6
+assign Pattern_Red[6] = (w_Row_Count <= 1 || w_Row_Count >= ACTIVE_ROWS-1-1 ||
+                         w_Col_Count <= 1 || w_Col_Count >= ACTIVE_COLS-1-1) ? ...
+```
+
+`w_Row_Count >= 478` holds for rows 478 through 524 — the last two active rows
+*and all 45 blanking rows* — so the pattern floods the vertical blanking with
+white, and columns 638–799 do the same horizontally. What looks like a border
+around the image is partly video sitting in the porches, and a monitor adjusting
+to it is adjusting to the wrong rectangle.
+
+Patterns 1, 2 and 3 gate correctly on
+`(w_Col_Count < ACTIVE_COLS && w_Row_Count < ACTIVE_ROWS)` and are the only ones
+usable for calibration. These modules came from the book projects and are used
+unmodified; the defect is noted rather than fixed, because they are scaffolding
+and `Char_Generator` blanks correctly on its own account —
+[tb_Char_Generator](#char_generator) asserts it continuously.

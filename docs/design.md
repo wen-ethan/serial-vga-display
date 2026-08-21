@@ -164,3 +164,97 @@ Recomputing `r_ROW * c_COL + r_COL` on every character would put that constant
 multiply — small as it is — plus its adder on the critical path of the common
 case, to produce a number an increment already had. The running register makes
 the frequent operation free and pays for the rare one once.
+
+## The two memories
+
+The design holds two memories, and both had to become block RAM rather than
+logic for it to fit at all.
+
+| | Shape | Purpose |
+| --- | --- | --- |
+| `Char_RAM` | 2048 × 8 | one ASCII code per grid cell; parser writes, generator reads |
+| `Font_ROM` | 1024 × 8 | 128 glyphs × 8 rows of an 8×8 font |
+
+### Why `Char_RAM` is 2048 deep and not 1200
+
+The grid is 1200 cells, but the character generator computes an address for
+*every* pixel, including the ones in the blanking intervals. During vertical
+blanking the cell row runs past the last live row; during horizontal blanking
+the cell column runs to 49 and `row * 40 + 4x` lands on the next row's cells.
+The widest address reached is **1329**. Because 1329 needs 11 address bits, we are left with 2048 words, given that 11 bits of address *is* 2048 words.
+
+### How the block RAMs get built
+
+An iCE40 `SB_RAM40_4K` always holds 4096 bits. Its four configurations trade
+depth against width: 256×16, 512×8, 1024×4, 2048×2.
+
+Tiling a `D × W` memory out of `d × w` blocks takes `ceil(D/d)` stacked in depth
+and `ceil(W/w)` stacked in width, and the two cost differently. Width-stacking
+is free (one block drives bits `[3:0]`, another `[7:4]`, and that is wires).
+Depth-stacking needs a multiplexer, because both blocks see the low address bits
+and the high bits have to select whose output is real, which is LUTs on the read
+path.
+
+So yosys takes the shallowest mode that still holds the whole depth in one
+block, then width-stacks to reach the word size:
+
+| | Mode chosen | Deep × wide | EBRs |
+| --- | --- | --- | --- |
+| `Font_ROM` (1024 × 8) | 1024×4 | 1 × 2 | 2 |
+| `Char_RAM` (2048 × 8) | 2048×2 | 1 × 4 | 4 |
+
+`Font_ROM` could equally have been two 512×8 blocks, but that is two deep and
+would need the mux, so 1024×4 wins. `Char_RAM` is the same trade one rung down.
+Neither ends up with a multiplexer on its read path.
+
+Six of the part's sixteen EBRs, confirmed from the `READ_MODE` parameters on the
+`SB_RAM40_4K` cells in the synthesised netlist rather than predicted:
+`10` is 1024×4, `11` is 2048×2.
+
+Measured on the assembled render path (`Static_Display_Top`, which is
+`Char_Generator` reading `Char_RAM` with `Test_Writer` filling it):
+
+```
+ICESTORM_LC :  518/1280   40%
+ICESTORM_RAM:    6/16     37%
+Max frequency: 121.85 MHz     (25 MHz required)
+```
+
+The logic figure includes `Test_Writer`'s character multiplexer, which is
+scaffolding and leaves on integration. The frequency is the deepest path in the
+design — a block RAM read feeding the font ROM's address — and it clears the
+requirement by nearly 5x.
+
+### The synchronous read is what makes any of this work
+
+Both memories present their data one clock after the address, from a registered
+read. This is not a stylistic choice, as an EBR read is registered by
+construction, so an asynchronous read cannot map to one at all. The same
+`Char_RAM` module, with `assign o_Rd_Data = r_Mem[i_Rd_Addr];` in place of the
+clocked read, synthesises to:
+
+```
+16,521  SB_LUT4
+16,384  SB_DFFE
+     0  SB_RAM40_4K
+```
+
+against a part with 1,280 LUTs. This is thirteen times over budget, from a one-line
+difference. However, using synchronous reads adds a clock of latency per read, forcing `Chat_Generator` to be a pipeline (the character RAM
+read and the font ROM read are two of its three stages). In this way, memories are not
+attached to the pipeline, they *are* most of it.
+
+### No arbitration, and no clock crossing
+
+`SB_RAM40_4K` is a genuine dual-port block, with independent address, data and
+enable on each side, so the generator's every-clock reads and the parser's
+occasional writes never contend. The two sides do not share the memory; the
+primitive has two ports.
+
+A write to the cell being read in the same cycle returns the old byte, from
+nonblocking assignment in simulation and from the primitive in hardware. That is
+one wrong character for one frame, 16 ms at 60 Hz, and no logic is spent on it.
+
+Parser, memory and generator all run on the same 25 MHz clock, so there is no
+clock domain crossing anywhere in the design; the UART is oversampled at 217
+clocks per bit rather than being given a clock of its own.

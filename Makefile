@@ -40,7 +40,9 @@ SRC_VGA_Test_Patterns_Top = bringup/VGA_Test_Patterns_Top.v \
 # Character display with no character RAM and no protocol: Char_Generator fed
 # by a stand-in, to prove the render path on its own before integration.
 SRC_Static_Display_Top = bringup/Static_Display_Top.v \
+                         bringup/Test_Writer.v \
                          rtl/Char_Generator.v \
+                         rtl/Char_RAM.v \
                          rtl/Font_ROM.v \
                          common/UART_RX.v \
                          common/UART_TX.v \
@@ -60,6 +62,7 @@ SIM_SRC_tb_Command_Parser    = rtl/Command_Parser.v \
                                common/UART_RX.v \
                                common/UART_TX.v
 SIM_SRC_tb_Font_ROM          = rtl/Font_ROM.v
+SIM_SRC_tb_Char_RAM          = rtl/Char_RAM.v
 SIM_SRC_tb_Char_Generator    = rtl/Char_Generator.v \
                                rtl/Font_ROM.v \
                                common/VGA/VGA_Sync_Pulses.v \

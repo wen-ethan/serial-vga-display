@@ -59,10 +59,14 @@ module Static_Display_Top
   wire [c_VIDEO_WIDTH-1:0] w_Grn_Video_CG, w_Grn_Video_Porch;
   wire [c_VIDEO_WIDTH-1:0] w_Blu_Video_CG, w_Blu_Video_Porch;
 
-  // Standin for Char_RAM: a character that depends only on its address, with
-  // the same one-clock read latency as Char_RAM. This is a simple way to test the Char_Generator
-  wire [10:0] w_Rd_Addr;
-  reg [7:0] r_Fake_Char = 8'h20; // space
+  // Char_RAM's two ports. The write side and the read side share nothing but
+  // the memory: Test_Writer and Char_Generator never touch each other.
+  wire [10:0] w_Rd_Addr;    // Char_Generator -> Char_RAM
+  wire [7:0]  w_Rd_Data;    // Char_RAM       -> Char_Generator, one clock later
+  wire        w_Wr_En;      // Test_Writer    -> Char_RAM
+  wire [10:0] w_Wr_Addr;
+  wire [7:0]  w_Wr_Data;
+
 
   // 25,000,000 / 115,200 = 217
   // Initiate UART RX
@@ -131,12 +135,16 @@ module Static_Display_Top
   assign o_Segment2_G = ~w_Segment2_G;
    
   //////////////////////////////////////////////////////////////////
-  // Character display, with no character RAM and no protocol
+  // Character display, with no protocol
   //////////////////////////////////////////////////////////////////
-  // Char_Generator sits where Test_Pattern_Gen used to, and its read port is
-  // answered by r_Fake_Char below instead of by a memory. The point is to prove
-  // the pixel arithmetic and the pipeline on their own, before either Char_RAM
-  // or Command_Parser can be blamed for anything.
+  // Char_Generator sits where Test_Pattern_Gen used to, reading characters out
+  // of the real Char_RAM. Test_Writer fills that memory once at power-up with a
+  // known message and then stops, so the screen is driven by something whose
+  // behaviour is already known and pixel bugs stay separable from protocol bugs.
+  //
+  // Test_Writer drives exactly the three signals Command_Parser drives. On
+  // integration it is deleted and the parser takes its place; nothing else in
+  // this section changes.
 
   // Generates Sync Pulses to run VGA
   VGA_Sync_Pulses #(.TOTAL_COLS(c_TOTAL_COLS),
@@ -162,15 +170,26 @@ module Static_Display_Top
       .i_HSync(w_HSync_Start),
       .i_VSync(w_VSync_Start),
       .o_Rd_Addr(w_Rd_Addr),
-      .i_Rd_Data(r_Fake_Char), // standin for Char_RAM
+      .i_Rd_Data(w_Rd_Data),
       .o_HSync(w_HSync_CG),
       .o_VSync(w_VSync_CG),
       .o_Red_Video(w_Red_Video_CG),
       .o_Grn_Video(w_Grn_Video_CG),
       .o_Blu_Video(w_Blu_Video_CG));
 
-  always @(posedge i_Clk)
-    r_Fake_Char <= 8'h20 + w_Rd_Addr[5:0];
+  Char_RAM #(.c_ADDR_BITS(11), .c_DATA_BITS(8)) Char_RAM_Inst
+    (.i_Clk(i_Clk),
+     .i_Wr_En(w_Wr_En),
+     .i_Wr_Addr(w_Wr_Addr),
+     .i_Wr_Data(w_Wr_Data),
+     .o_Rd_Data(w_Rd_Data),
+     .i_Rd_Addr(w_Rd_Addr));
+
+  Test_Writer #(.c_ADDR_BITS(11), .c_CELLS(1200)) Test_Writer_Inst
+    (.i_Clk(i_Clk),
+     .o_Wr_En(w_Wr_En),
+     .o_Wr_Addr(w_Wr_Addr),
+     .o_Wr_Data(w_Wr_Data));
 
      
   VGA_Sync_Porch  #(.VIDEO_WIDTH(c_VIDEO_WIDTH),
