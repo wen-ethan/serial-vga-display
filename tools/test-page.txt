@@ -1,0 +1,30 @@
+0....+....1....+....2....+....3....+..|
+02 SERIAL VGA DISPLAY -- TEST 7       |
+03 ================================== |
+04  !"#$%&'()*+,-./0123456789:;<=>?@A |
+05 BCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abc |
+06 defghijklmnopqrstuvwxyz{|}~        |
+07 ================================== |
+08 EVERY LINE ENDS WITH A BAR IN      |
+09 COLUMN 38. IF ONE BAR SITS OUT OF  |
+10 LINE, THAT LINE LOST OR GAINED A   |
+11 BYTE ON THE WAY OVER.              |
+12 ================================== |
+13 MMMMMMMMMM WIDE GLYPHS MMMMMMMMMM  |
+14 iiiiiiiiii NARROW GLYPHS iiiiiiii  |
+15 WWWW #### @@@@ %%%% &&&& $$$$ ???? |
+16 0O 1lI 5S 8B 2Z rn/m -- LOOKALIKES |
+17 ================================== |
+18 The quick brown fox jumps over     |
+19 the lazy dog. 0123456789 times.    |
+20 Pack my box with five dozen        |
+21 liquor jugs. Sphinx of black       |
+22 quartz, judge my vow. How          |
+23 vexingly quick daft zebras jump!   |
+24 Waltz, bad nymph, for quick jigs   |
+25 vex. Glib jocks quiz nymph.        |
+26 ================================== |
+27 30 lines x 39 cols. Column 39 is   |
+28 left blank on purpose: writing it  |
+29 would advance the cursor a row.    |
+30 END OF FILE -- nothing below this. |
