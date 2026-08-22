@@ -8,6 +8,12 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 25 MHz), built with the open-source toolchain: Yosys, nextpnr-ice40, IceStorm
 (`icepack`, `icetime`, `iceprog`), and Icarus Verilog for simulation.
 
+https://github.com/user-attachments/assets/dd80b66c-825d-4818-97ca-f8ceb0252ce6
+
+*Typed live into a terminal at 115200 baud and drawn by the FPGA. There is no
+framebuffer: the screen is 1200 character codes in block RAM, and each pixel is
+looked up through the font ROM as the beam scans past it.*
+
 ![A frame rendered from simulation](docs/images/render.png)
 
 *640x480 output, rendered from simulation by
@@ -24,7 +30,7 @@ out-of-range coordinates, overflow past the last cell, and a deliberate baud
 mismatch), and none of it needed a power cycle or left the display frozen. The 
 design uses 585 of 1280 logic cells and 6 of 16 block RAMs, and closes timing at 107 MHz against a 25 MHz requirement.
 
-Still to come: a demo video and a final pass over the docs.
+Still to come: a final pass over the docs.
 
 ## Docs
 
