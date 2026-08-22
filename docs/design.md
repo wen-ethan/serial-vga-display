@@ -1,5 +1,35 @@
 # Design
 
+## How the pieces connect
+
+```mermaid
+flowchart LR
+  PC["Host PC<br/>tools/send.py"] -->|"UART 115200 8N1"| RX["UART_RX"]
+  RX -->|"o_RX_Byte + o_RX_DV"| P["Command_Parser<br/>4-state FSM, cursor, clear walk"]
+  P -->|"write port<br/>o_Wr_En / o_Wr_Addr / o_Wr_Data"| RAM[("Char_RAM<br/>2048 x 8, 4 EBRs")]
+  SYNC["VGA_Sync_Pulses"] -->|"HSync, VSync"| CG["Char_Generator<br/>Sync_To_Count + 3-stage pipeline"]
+  CG <-->|"cell address / character code"| RAM
+  CG <-->|"glyph address / glyph row"| ROM[("Font_ROM<br/>1024 x 8, 2 EBRs<br/>instantiated inside Char_Generator")]
+  CG -->|"RGB + HSync/VSync delayed 3 clocks"| PORCH["VGA_Sync_Porch"]
+  PORCH --> VGA["VGA out<br/>640x480 at 60 Hz"]
+```
+
+Five modules on one 25 MHz clock, wired up in
+[rtl/Serial_Display_Top.v](../rtl/Serial_Display_Top.v). Two labels on that
+diagram are the design rather than the wiring:
+
+- **The write port into `Char_RAM`** (`o_Wr_En`, `o_Wr_Addr`, `o_Wr_Data`) is
+  the seam bring-up hinged on:
+  [bringup/Test_Writer.v](../bringup/Test_Writer.v) drove those three signals
+  before `Command_Parser` existed, proving the render path on hardware before a
+  byte of protocol was written. Integration deleted the stand-in and changed
+  nothing else.
+- **The syncs are delayed three clocks** crossing `Char_Generator`, because the
+  two chained memory reads behind each pixel cost a clock each and the syncs
+  have to describe the same pixel as the video beside them. The error is
+  invisible on a monitor, so it gets a testbench of its own
+  ([verification.md](verification.md#the-property-that-needs-a-testbench)).
+
 ## Command parser state table
 
 The FSM in [rtl/Command_Parser.v](../rtl/Command_Parser.v) has four states and
@@ -240,17 +270,30 @@ Six of the part's sixteen EBRs, confirmed from the `READ_MODE` parameters on the
 Measured on the shipping design, `Serial_Display_Top`:
 
 ```
-ICESTORM_LC :  583/1280   45%
+ICESTORM_LC :  585/1280   45%
 ICESTORM_RAM:    6/16     37%
-Max frequency: 111.91 MHz     (25 MHz required)
+Max frequency: 108.54 MHz     (PASS at 25.00 MHz)
 ```
 
-The logic figure went *up* on integration, from 518, even though `UART_TX` and
-the bring-up writer both came out: `Command_Parser` costs more than either,
-carrying a cursor, a clear-walk counter, a four-state FSM and the `ESC_ROW`
-address reconstruction. The frequency is the deepest path in the design — a
-block RAM read feeding the font ROM's address — and it clears the requirement by
-4.5x.
+Read off `build/Serial_Display_Top-nextpnr.log` after routing, not the
+post-placement estimate printed earlier in the same log. The Makefile passes
+`--freq 25` so that "PASS" is measured against the Go Board's actual clock;
+without the flag nextpnr checks against its own 12 MHz default and reports a
+pass against a target nothing in the design ever claimed.
+
+The logic figure went *up* on integration, from `Static_Display_Top`'s 515, even
+though `UART_TX` and the bring-up writer both came out: `Command_Parser` costs
+more than either, carrying a cursor, a clear-walk counter, a four-state FSM and
+the `ESC_ROW` address reconstruction. Seventy cells for a protocol is cheap.
+
+That reconstruction is also the critical path: nextpnr traces 9.21 ns from
+`UART_RX`'s byte register, through the row clamp's compare chain
+([Command_Parser.v:53](../rtl/Command_Parser.v#L53)), through
+`w_Row_Clamped * c_COLS + w_Col_Clamped`
+([:123](../rtl/Command_Parser.v#L123)), to setup on `r_Addr`. That is
+[Address arithmetic](#address-arithmetic) arriving from the other direction;
+the per-character path is increments and stays shallow, so the one rare path
+that has to multiply sets the ceiling. With a 4.3x margin, it can stay.
 
 ### The synchronous read is what makes any of this work
 
@@ -267,7 +310,7 @@ clocked read, synthesises to:
 ```
 
 against a part with 1,280 LUTs. This is thirteen times over budget, from a one-line
-difference. However, using synchronous reads adds a clock of latency per read, forcing `Chat_Generator` to be a pipeline (the character RAM
+difference. However, using synchronous reads adds a clock of latency per read, forcing `Char_Generator` to be a pipeline (the character RAM
 read and the font ROM read are two of its three stages). In this way, memories are not
 attached to the pipeline, they *are* most of it.
 

@@ -209,6 +209,8 @@ font ROM read register, and the output register) so HSync and VSync have to be
 delayed by three clocks to stay with the video they describe; every module in
 the video chain honours this rule. Because an error to this delay is invisible on a monitor, the testbench below was created to catch any errors in simulation instead. 
 
+There is, however, deliberately no waveform capture of the character-fetch pipeline here, as a VCD would show the three registers in the right order and prove nothing about whether the right pixel came out the end. As such, the evidence is the glyph dumps of `tb_Font_ROM` and the whole-frame pixel comparison below instead.
+
 ### The harness
 
 [sim/tb_Char_Generator.v](../sim/tb_Char_Generator.v) shrinks the frame to
@@ -514,7 +516,7 @@ Run on the Go Board at 115200, against `Serial_Display_Top`.
 | 5 | More than 1200 characters | Wraps to (0, 0) and keeps painting | Matched |
 | 6 | Reconnect at 9600, mash keys | *Junk characters* | **Contradicted**: see below |
 | 7 | Reconnect at 57600, mash keys | Junk characters, no lock-up | Matched; printable bytes landed on screen, the rest were discarded |
-| 8 | `tools/send.py --file tools/test-page.txt` | Every line renders; nothing drops | Matched; the column-38 rule was unbroken across all 30 rows |
+| 8 | [`send.py --file test-page.txt`](../tools/send.py) | Every line of [tools/test-page.txt](../tools/test-page.txt) renders; nothing drops | Matched; the column-38 rule was unbroken across all 30 rows |
 
 No case required a power cycle, and no case left the display frozen or the sync
 dropped.

@@ -8,6 +8,23 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 25 MHz), built with the open-source toolchain: Yosys, nextpnr-ice40, IceStorm
 (`icepack`, `icetime`, `iceprog`), and Icarus Verilog for simulation.
 
+```mermaid
+flowchart LR
+  PC["Host PC<br/>tools/send.py"] -->|"UART 115200 8N1"| RX["UART_RX"]
+  RX -->|"o_RX_Byte + o_RX_DV"| P["Command_Parser<br/>4-state FSM, cursor, clear walk"]
+  P -->|"write port<br/>o_Wr_En / o_Wr_Addr / o_Wr_Data"| RAM[("Char_RAM<br/>2048 x 8, 4 EBRs")]
+  SYNC["VGA_Sync_Pulses"] -->|"HSync, VSync"| CG["Char_Generator<br/>Sync_To_Count + 3-stage pipeline"]
+  CG <-->|"cell address / character code"| RAM
+  CG <-->|"glyph address / glyph row"| ROM[("Font_ROM<br/>1024 x 8, 2 EBRs<br/>instantiated inside Char_Generator")]
+  CG -->|"RGB + HSync/VSync delayed 3 clocks"| PORCH["VGA_Sync_Porch"]
+  PORCH --> VGA["VGA out<br/>640x480 at 60 Hz"]
+```
+
+*Five modules on one 25 MHz clock. The write port into `Char_RAM` is the seam
+bring-up was built around, and the three-clock sync delay through
+`Char_Generator` is what keeps the syncs describing the same pixel as the video
+beside them — both explained in [docs/design.md](docs/design.md).*
+
 https://github.com/user-attachments/assets/2a8c6461-48c8-42f1-9754-1166cb62177f
 
 *Typed live into a terminal at 115200 baud and drawn by the FPGA. There is no
@@ -28,9 +45,8 @@ Malformed input has been run
 against the board (unprintable bytes, truncated and stacked escape sequences, 
 out-of-range coordinates, overflow past the last cell, and a deliberate baud 
 mismatch), and none of it needed a power cycle or left the display frozen. The 
-design uses 585 of 1280 logic cells and 6 of 16 block RAMs, and closes timing at 107 MHz against a 25 MHz requirement.
-
-Still to come: a final pass over the docs.
+design uses 585 of 1280 logic cells and 6 of 16 block RAMs, and closes timing at
+108.5 MHz against the 25 MHz clock.
 
 ## Docs
 
@@ -127,8 +143,9 @@ holds one descriptor across both steps.
 
 [tools/test-page.txt](tools/test-page.txt) is a full 30-line screen built to
 make a dropped byte visible. Every line ends with a bar in column 38, so a lost
-or gained character moves that line's bar out of a column the eye already reads
-as straight:
+or gained character bends a column the eye already reads as straight. Lines are
+39 wide on the 40-column grid because writing the last cell advances the cursor
+by itself, and the CR LF would then advance it again:
 
     tools/send.py --file tools/test-page.txt
 
@@ -150,7 +167,7 @@ The design, protocol, and RTL are my own. The modules in `common/`, the designs
 in `bringup/`, and the Go Board pin constraints all come from Russell Merrick's
 [Nandland](https://nandland.com/project-1-your-first-go-board-project/) (the Go
 Board tutorial series and *Getting Started with FPGAs*), carried over from
-[go-board-fpga](https://github.com/ethanwen/go-board-fpga).
+[go-board-fpga](https://github.com/wen-ethan/go-board-fpga).
 
 The glyph data in `rtl/Font_ROM.v` comes from
 [font8x8](https://github.com/dhepper/font8x8) by Daniel Hepper (public domain),

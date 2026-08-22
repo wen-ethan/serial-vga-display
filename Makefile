@@ -95,7 +95,7 @@ $(BUILD)/$(TOP).json: $(SOURCES) | $(BUILD)
 	yosys -p "synth_ice40 -top $(TOP) -json $@" $(SOURCES) 2>&1 | tee $(BUILD)/$(TOP)-yosys.log
 
 $(BUILD)/$(TOP).asc: $(BUILD)/$(TOP).json $(PCF)
-	nextpnr-ice40 $(DEVICE) --json $< --pcf $(PCF) --asc $@ 2>&1 | tee $(BUILD)/$(TOP)-nextpnr.log
+	nextpnr-ice40 $(DEVICE) --freq 25 --json $< --pcf $(PCF) --asc $@ 2>&1 | tee $(BUILD)/$(TOP)-nextpnr.log
 
 $(BUILD)/$(TOP).bin: $(BUILD)/$(TOP).asc
 	icepack $< $@
