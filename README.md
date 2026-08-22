@@ -23,7 +23,7 @@ flowchart LR
 *Five modules on one 25 MHz clock. The write port into `Char_RAM` is the seam
 bring-up was built around, and the three-clock sync delay through
 `Char_Generator` is what keeps the syncs describing the same pixel as the video
-beside them — both explained in [docs/design.md](docs/design.md).*
+beside them, both explained in [docs/design.md](docs/design.md).*
 
 https://github.com/user-attachments/assets/2a8c6461-48c8-42f1-9754-1166cb62177f
 
