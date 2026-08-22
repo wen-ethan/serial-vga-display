@@ -16,12 +16,15 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 **Status: working end to end.** Typing in a terminal puts characters on the
 monitor. Every module has a self-checking testbench, and an end-to-end one
 drives real serial bytes into the whole design and compares the frame it paints
-against the image those bytes should produce. The design uses 585 of 1280 logic
-cells and 6 of 16 block RAMs, and closes timing at 107 MHz against a 25 MHz
-requirement.
+against the image those bytes should produce. 
 
-Still to come: deliberate abuse on hardware (malformed commands, garbage at the
-wrong baud) and a demo video.
+Malformed input has been run
+against the board (unprintable bytes, truncated and stacked escape sequences, 
+out-of-range coordinates, overflow past the last cell, and a deliberate baud 
+mismatch), and none of it needed a power cycle or left the display frozen. The 
+design uses 585 of 1280 logic cells and 6 of 16 block RAMs, and closes timing at 107 MHz against a 25 MHz requirement.
+
+Still to come: a demo video and a final pass over the docs.
 
 ## Docs
 
@@ -29,20 +32,22 @@ wrong baud) and a demo video.
   invariant, the five protocol decisions and the reasoning behind each, and why
   the cell address is a running counter rather than a multiply.
 - [docs/verification.md](docs/verification.md): how each module is tested, what
-  the tests cover, waveform captures, and what is deliberately not covered.
+  the tests cover, waveform captures, the malformed-input cases run on hardware, and what is deliberately
+  not covered.
 
 ## Build
 
-    make TOP=UART_Loopback_Top          # synthesize, place and route, pack
-    make TOP=UART_Loopback_Top prog     # flash the board over USB
-    make TOP=UART_Loopback_Top timing   # icetime timing report
-    make font                           # regenerate rtl/Font_ROM.v
-    make clean                          # remove build/
+    make TOP=Serial_Display_Top          # synthesize, place and route, pack
+    make TOP=Serial_Display_Top prog     # flash the board over USB
+    make TOP=Serial_Display_Top timing   # icetime timing report
+    make font                            # regenerate rtl/Font_ROM.v
+    make clean                           # remove build/
 
-`TOP` picks which design to build (`UART_Loopback_Top`, `VGA_Test_Patterns_Top`
-or `Static_Display_Top`) and each one names its own file list in the
-Makefile. Nothing is globbed; yosys only sees the files it is handed, so every
-module a design instantiates has to be listed there.
+`Serial_Display_Top` is the real design. `TOP` also takes the three bring-up
+designs (`UART_Loopback_Top`, still the Makefile default,
+`VGA_Test_Patterns_Top` and `Static_Display_Top`) and each one names its own
+file list in the Makefile. Nothing is globbed; yosys only sees the files it is
+handed, so every module a design instantiates has to be listed there.
 
 Generated files all land in `build/`, which is gitignored.
 
@@ -87,7 +92,7 @@ takes seconds.
     bringup/                 designs that prove one layer at a time
     rtl/                     new RTL for this project
     sim/                     testbenches and saved waveform signal sets
-    tools/                   the font ROM generator and the font it reads
+    tools/                   the font ROM generator, the font it reads, and the sender
     docs/                    design rationale and verification record
     build/                   generated, gitignored
 
@@ -99,7 +104,29 @@ come out once the real design is running on hardware.
 
 ## Serial
 
-Connect at 115200 baud, 8N1:
+Connect at 115200 baud, 8N1. [tools/send.py](tools/send.py) is the easiest way
+in -- standard library only, so it runs on a fresh clone with no `pip install`:
+
+    tools/send.py                        # the built-in demo screen
+    tools/send.py --text 'HELLO'         # send a string
+    tools/send.py --file notes.txt       # send a file
+    echo HELLO | tools/send.py           # or pipe it
+    tools/send.py --clear                # clear and stop
+    tools/send.py --at 10 5 --text 'X'   # position the cursor first
+
+It exists because `cat notes.txt > /dev/cu.usbserial-*` does not work: the
+protocol needs CR LF where a Unix file has bare LF, and opening a tty resets the
+baud rate a separate `stty` just set. `send.py` translates the newlines and
+holds one descriptor across both steps.
+
+[tools/test-page.txt](tools/test-page.txt) is a full 30-line screen built to
+make a dropped byte visible. Every line ends with a bar in column 38, so a lost
+or gained character moves that line's bar out of a column the eye already reads
+as straight:
+
+    tools/send.py --file tools/test-page.txt
+
+To type at the display directly instead:
 
     screen $(ls /dev/cu.usbserial-*1 | tail -1) 115200
 
