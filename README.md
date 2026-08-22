@@ -8,7 +8,7 @@ through a font ROM. Target board is the Nandland Go Board (iCE40-HX1K, VQ100,
 25 MHz), built with the open-source toolchain: Yosys, nextpnr-ice40, IceStorm
 (`icepack`, `icetime`, `iceprog`), and Icarus Verilog for simulation.
 
-https://github.com/user-attachments/assets/dd80b66c-825d-4818-97ca-f8ceb0252ce6
+https://github.com/user-attachments/assets/2a8c6461-48c8-42f1-9754-1166cb62177f
 
 *Typed live into a terminal at 115200 baud and drawn by the FPGA. There is no
 framebuffer: the screen is 1200 character codes in block RAM, and each pixel is
